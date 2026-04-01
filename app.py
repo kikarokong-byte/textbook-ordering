@@ -470,26 +470,102 @@ with tab2:
 with tab3:
     st.markdown("### ⚙️ อัปเดตฐานข้อมูลหนังสือเรียนหลัก")
     st.warning(f"ไฟล์ฐานข้อมูลปัจจุบันมีจำนวน: **{len(df_db):,}** รายการ")
-    
+
     st.markdown("---")
-    st.markdown("#### 🚀 ดึงข้อมูลล่าสุดจากเว็บไซต์อัตโนมัติ")
-    st.info("💡 เมื่อกดปุ่ม ระบบจะเปิดหน้าต่างการทำงานสีดำ (Terminal) ขึ้นมาใหม่ เพื่อไม่ให้หน้าเว็บค้าง ระหว่างนี้คุณสามารถใช้งานระบบค้นหาต่อได้เลยครับ")
-    
-    if st.button("▶️ เปิดโปรแกรมอัปเดตฐานข้อมูล (รันไฟล์ .bat)", type="primary"):
+    st.markdown("#### 🚀 ดึงข้อมูลล่าสุดจากเว็บไซต์ + อัปโหลด GitHub อัตโนมัติ")
+    st.info(
+        "💡 กดปุ่มด้านล่างเพียงครั้งเดียว ระบบจะทำ 3 ขั้นตอนให้อัตโนมัติ:\n"
+        "1. **Scrape** ดึงข้อมูลหนังสือจากเว็บ (ใช้เวลา ~5–10 นาที)\n"
+        "2. **Push GitHub** อัปโหลด textbooks.xlsx ขึ้น Repository\n"
+        "3. **Refresh** โหลดข้อมูลใหม่บนระบบนี้ทันที (เว็บครูจะอัปเดตเองใน ~2 นาที)"
+    )
+
+    if st.button("🔄 อัปเดตฐานข้อมูลหนังสือ (อัตโนมัติ)", type="primary", use_container_width=True):
+        log_box = st.empty()
+        progress_bar = st.progress(0, text="กำลังเริ่มต้น...")
+        logs = []
+
+        def add_log(msg):
+            logs.append(msg)
+            log_box.code("\n".join(logs[-30:]), language="bash")  # แสดง 30 บรรทัดล่าสุด
+
+        # ──────────────────────────────────────────
+        # Step 1: รัน update_data.py
+        # ──────────────────────────────────────────
+        progress_bar.progress(5, text="⏳ กำลัง Scrape ข้อมูลหนังสือ... (อาจใช้เวลา 5-10 นาที)")
+        add_log("═══ Step 1: Scraping textbook data ═══")
+        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "update_data.py")
+
         try:
-            # ใช้ subprocess สั่งเปิดไฟล์ .bat ขึ้นมาในหน้าต่างใหม่ (สำหรับ Windows)
-            subprocess.Popen(['cmd.exe', '/c', 'start', 'อัปเดตฐานข้อมูล.bat'])
-            
-            st.success("✅ เปิดหน้าต่างดึงข้อมูลสำเร็จ! กรุณาดูความคืบหน้าที่หน้าต่างสีดำครับ")
-            st.warning("⚠️ สำคัญ: เมื่อหน้าต่างสีดำทำงานเสร็จและปิดไปแล้ว ให้คุณกดปุ่ม '🔄 โหลดฐานข้อมูลใหม่ (Refresh)' ที่เมนูด้านซ้ายมือ เพื่อให้ระบบดึงหนังสือชุดใหม่มาแสดงครับ")
-            
+            proc = subprocess.Popen(
+                ["python", script_path],
+                cwd=os.path.dirname(os.path.abspath(__file__)),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace"
+            )
+            for line in proc.stdout:
+                add_log(line.rstrip())
+            proc.wait()
+            if proc.returncode != 0:
+                st.error("❌ Scraping ล้มเหลว กรุณาตรวจสอบ Log ด้านบน")
+                st.stop()
         except Exception as e:
-            st.error(f"❌ ไม่สามารถเปิดไฟล์ได้ กรุณาตรวจสอบว่ามีไฟล์ 'อัปเดตฐานข้อมูล.bat' อยู่ในโฟลเดอร์เดียวกับระบบหรือไม่ (Error: {e})")
+            st.error(f"❌ ไม่สามารถรัน update_data.py ได้: {e}")
+            st.stop()
+
+        add_log("\n✅ Scraping เสร็จสมบูรณ์!")
+        progress_bar.progress(70, text="✅ Scraping เสร็จแล้ว — กำลัง Push ขึ้น GitHub...")
+
+        # ──────────────────────────────────────────
+        # Step 2: Git add + commit + push
+        # ──────────────────────────────────────────
+        add_log("\n═══ Step 2: Pushing textbooks.xlsx to GitHub ═══")
+        repo_dir = os.path.dirname(os.path.abspath(__file__))
+
+        def run_git(args, desc):
+            add_log(f"$ git {' '.join(args)}")
+            r = subprocess.run(
+                ["git"] + args,
+                cwd=repo_dir,
+                capture_output=True, text=True, encoding="utf-8", errors="replace"
+            )
+            if r.stdout.strip(): add_log(r.stdout.strip())
+            if r.stderr.strip(): add_log(r.stderr.strip())
+            return r.returncode
+
+        import datetime as _dt
+        commit_msg = f"auto: อัปเดตฐานข้อมูลหนังสือ {_dt.datetime.now().strftime('%Y-%m-%d %H:%M')}"
+
+        run_git(["add", "textbooks.xlsx"], "add")
+        progress_bar.progress(80, text="📦 Committing...")
+        ret = run_git(["commit", "-m", commit_msg], "commit")
+        if ret not in (0, 1):  # 1 = nothing to commit (ไม่ถือว่า error)
+            st.warning("⚠️ Git commit มีปัญหา แต่จะลอง Push ต่อ")
+        progress_bar.progress(90, text="📡 Pushing to GitHub...")
+        ret_push = run_git(["push"], "push")
+
+        if ret_push == 0:
+            add_log("\n✅ Push GitHub สำเร็จ!")
+        else:
+            add_log("\n⚠️ Push อาจมีปัญหา ตรวจสอบ log ด้านบน")
+
+        # ──────────────────────────────────────────
+        # Step 3: Refresh cache
+        # ──────────────────────────────────────────
+        add_log("\n═══ Step 3: Refreshing local cache ═══")
+        st.cache_data.clear()
+        add_log("✅ Cache cleared!")
+        progress_bar.progress(100, text="🎉 เสร็จสมบูรณ์ทุกขั้นตอน!")
+        st.success("🎉 อัปเดตเสร็จสมบูรณ์! ข้อมูลหนังสือชุดใหม่พร้อมใช้งานแล้ว เว็บสำหรับคุณครูจะอัปเดตเองภายใน ~2 นาที")
+        st.rerun()
 
     st.markdown("---")
     st.markdown("#### 📂 กรณีต้องการอัปโหลดไฟล์ด้วยตัวเอง (Manual)")
     new_db_file = st.file_uploader("เลือกไฟล์ Excel บัญชีสื่อฯ (นามสกุล .xlsx)", type=['xlsx'])
-    
+
     if new_db_file:
         if st.button("💾 บันทึกและแทนที่ฐานข้อมูลเดิม", type="secondary"):
             try:
