@@ -108,14 +108,23 @@ with col_sidebar:
     if len(st.session_state.cart) == 0:
         st.info("ยังไม่มีสินค้าในตะกร้า")
     else:
-        for k, v in list(st.session_state.cart.items()):
-            with st.container(border=True):
-                st.markdown(f"**{v['name']}**")
-                st.caption(f"จำนวน: {v['qty']} เล่ม | รวม: {v['qty']*v['price']:,.2f} บ.")
-                if st.button("❌ นำออก", key=f"del_{k}", use_container_width=True):
-                    del st.session_state.cart[k]
-                    st.rerun()
-                
+        # จัดกลุ่มตามชั้น
+        grouped_cart = {}
+        for k, v in st.session_state.cart.items():
+            cn = v.get('class_name', class_name)
+            if cn not in grouped_cart: grouped_cart[cn] = []
+            grouped_cart[cn].append((k, v))
+        
+        for cn, items in grouped_cart.items():
+            st.caption(f"🎓 {cn}")
+            for k, v in items:
+                with st.container(border=True):
+                    st.markdown(f"**{v['name']}**")
+                    st.caption(f"จำนวน: {v['qty']} เล่ม | รวม: {v['qty']*v['price']:,.2f} บ.")
+                    if st.button("❌ นำออก", key=f"del_{k}", use_container_width=True):
+                        del st.session_state.cart[k]
+                        st.rerun()
+        
         if st.button("🗑️ ล้างตะกร้าทั้งหมด", use_container_width=True):
             st.session_state.cart = {}
             st.rerun()
@@ -128,14 +137,27 @@ with col_sidebar:
         btn_type = "secondary" if is_over_budget else "primary"
         
         if st.button(btn_label, type=btn_type, use_container_width=True):
-            items = [{'book_name': v['name'], 'publisher': v['pub'], 'price': v['price'], 'qty': v['qty']} for k,v in st.session_state.cart.items()]
-            success, msg = db.save_order(teacher_name, class_name, items)
-            if success:
+            # แยก items ตามชั้นแล้วบันทึกแยกกัน
+            cart_by_class = {}
+            for k, v in st.session_state.cart.items():
+                cn = v.get('class_name', class_name)
+                if cn not in cart_by_class: cart_by_class[cn] = []
+                cart_by_class[cn].append({'book_name': v['name'], 'publisher': v['pub'], 'price': v['price'], 'qty': v['qty']})
+            
+            all_ok = True
+            errors = []
+            for cn, items in cart_by_class.items():
+                success, msg = db.save_order(teacher_name, cn, items)
+                if not success:
+                    all_ok = False
+                    errors.append(f"{cn}: {msg}")
+            
+            if all_ok:
                 st.session_state.cart = {}
                 st.success("🎉 ระบบได้รับใบคำสั่งซื้อเรียบร้อยแล้ว! ข้อมูลถูกส่งไปยังฝ่ายจัดซื้อทันที")
                 st.balloons()
             else:
-                st.error(f"❌ {msg}")
+                st.error("❌ " + " | ".join(errors))
             
     st.markdown("---")
     st.markdown("#### 🔍 ตัวกรองค้นหาแคตตาล็อก")
@@ -244,7 +266,8 @@ with col_main:
                                     'name': row.get('ชื่อหนังสือ', '-'),
                                     'pub': row.get('ผู้จัดพิมพ์', '-'),
                                     'price': price,
-                                    'qty': qty
+                                    'qty': qty,
+                                    'class_name': class_name  # เก็บชั้นที่เลือกไว้
                                 }
                                 st.rerun()
                             elif qty == 0 and book_id in st.session_state.cart:
