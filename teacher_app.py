@@ -56,6 +56,13 @@ if 'cart' not in st.session_state:
 
 st.title("🛒 ระบบเบิกจ่ายและสั่งหนังสือเรียนสำหรับคุณครู")
 
+# แสดงวันที่อัปเดตฐานข้อมูล
+_db_mtime = os.path.getmtime(DB_PATH) if os.path.exists(DB_PATH) else None
+if _db_mtime:
+    import datetime as _dt
+    _db_date = _dt.datetime.fromtimestamp(_db_mtime).strftime("%d/%m/%Y %H:%M น.")
+    st.caption(f"📅 ฐานข้อมูลหนังสืออัปเดตล่าสุด: **{_db_date}**")
+
 # --- โซนล็อกอินจำแลง ---
 with st.container(border=True):
     st.markdown("#### 👤 ข้อมูลผู้สั่งซื้อ (โปรดกรอกก่อนเริ่มใช้งาน)")

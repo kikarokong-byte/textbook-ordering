@@ -469,7 +469,18 @@ with tab2:
 # --------------------------------------------------
 with tab3:
     st.markdown("### ⚙️ อัปเดตฐานข้อมูลหนังสือเรียนหลัก")
-    st.warning(f"ไฟล์ฐานข้อมูลปัจจุบันมีจำนวน: **{len(df_db):,}** รายการ")
+
+    # แสดงสถิติและวันที่อัปเดตล่าสุด
+    _mtime = os.path.getmtime(DB_PATH) if os.path.exists(DB_PATH) else None
+    if _mtime:
+        import datetime as _dt
+        _updated_str = _dt.datetime.fromtimestamp(_mtime).strftime("%-d %b %Y เวลา %H:%M น.")
+    else:
+        _updated_str = "ไม่ทราบ"
+
+    col_stat1, col_stat2 = st.columns(2)
+    col_stat1.metric("📚 จำนวนรายการในฐานข้อมูล", f"{len(df_db):,} รายการ")
+    col_stat2.metric("🕐 อัปเดตล่าสุด", _updated_str)
 
     st.markdown("---")
     st.markdown("#### 🚀 ดึงข้อมูลล่าสุดจากเว็บไซต์ + อัปโหลด GitHub อัตโนมัติ")
