@@ -118,12 +118,20 @@ with col_sidebar:
         for cn, items in grouped_cart.items():
             st.caption(f"🎓 {cn}")
             for k, v in items:
-                with st.container(border=True):
-                    st.markdown(f"**{v['name']}**")
-                    st.caption(f"จำนวน: {v['qty']} เล่ม | รวม: {v['qty']*v['price']:,.2f} บ.")
-                    if st.button("❌ นำออก", key=f"del_{k}", use_container_width=True):
+                c_name, c_btn = st.columns([5, 1])
+                with c_name:
+                    st.markdown(
+                        f"<div style='font-size:0.82em; padding:4px 0; line-height:1.3;'>"
+                        f"<b>{v['name']}</b><br>"
+                        f"<span style='color:#64748b;'>{v['qty']} เล่ม · ฿{v['qty']*v['price']:,.0f}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+                with c_btn:
+                    if st.button("✕", key=f"del_{k}", help="นำออกจากตะกร้า"):
                         del st.session_state.cart[k]
                         st.rerun()
+            st.markdown("<hr style='margin:4px 0; border-color:#e2e8f0;'>", unsafe_allow_html=True)
         
         if st.button("🗑️ ล้างตะกร้าทั้งหมด", use_container_width=True):
             st.session_state.cart = {}
