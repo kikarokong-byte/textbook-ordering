@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+
+# Streamlit Secrets (ห้าม push ขึ้น GitHub เด็ดขาด!)
+.streamlit/secrets.toml
+
+# Database ท้องถิ่น (ไม่จำเป็นต้องขึ้น Cloud)
+*.db
+
+# File ชั่วคราว
+*.xlsx.bak
+~$*.xlsx
+Thumbs.db
+.DS_Store
