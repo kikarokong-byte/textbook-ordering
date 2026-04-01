@@ -46,6 +46,7 @@ def _get_sheet(sheet_name):
     sh = client.open_by_url(spreadsheet_url)
     return sh.worksheet(sheet_name)
 
+@st.cache_data(show_spinner=False, ttl=60)
 def _load_gsheet_as_df(sheet_name):
     ws = _get_sheet(sheet_name)
     data = ws.get_all_records()
@@ -178,6 +179,7 @@ def save_order(teacher_name, class_name, cart_items):
             ])
             next_id += 1
         ws.append_rows(rows_to_add)
+        _load_gsheet_as_df.clear()  # ล้าง cache เพื่อให้ยอดอัพเดตทันที
         return True, "บันทึกสำเร็จ"
     
     conn = _get_sqlite_connection()
@@ -229,6 +231,7 @@ def clear_orders():
         headers = ws.row_values(1)
         ws.clear()
         ws.append_row(headers)
+        _load_gsheet_as_df.clear()  # ล้าง cache
         return
     
     conn = _get_sqlite_connection()
