@@ -588,6 +588,66 @@ with tab3:
             except Exception as e:
                 st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกไฟล์: {e}")
 
+    st.markdown("---")
+    with st.expander("🖥️ คู่มือ: ติดตั้งระบบอัปเดตบนเครื่องอื่น (คลิกเพื่อดู)", expanded=False):
+        st.markdown("""
+> ⚠️ **เครื่องที่ใช้อัปเดตต้องอยู่ในเครือข่ายโรงเรียนเท่านั้น** (เพื่อเข้าถึงเว็บ 202.29.173.190)
+
+---
+
+### 🔧 ขั้นตอนที่ 1: ติดตั้ง Python (ทำครั้งเดียว)
+1. เปิด Browser → ไปที่ **https://www.python.org/downloads/**
+2. กด **"Download Python"** → ติดตั้ง
+3. ⚠️ **สำคัญ:** ติ๊กถูกที่ **"Add Python to PATH"** ก่อนกด Install
+
+---
+
+### 🔧 ขั้นตอนที่ 2: ติดตั้ง Git (ทำครั้งเดียว)
+1. เปิด Browser → ไปที่ **https://git-scm.com/download/win**
+2. ดาวน์โหลดและติดตั้ง (กด Next ตลอด ไม่ต้องเปลี่ยนอะไร)
+
+---
+
+### 🔧 ขั้นตอนที่ 3: Clone โปรเจกต์ลงเครื่อง (ทำครั้งเดียว)
+เปิด **Command Prompt** (กด Win+R → พิมพ์ `cmd` → Enter) แล้วพิมพ์:
+""")
+
+        st.code("git clone https://github.com/kikarokong-byte/textbook-ordering.git", language="bash")
+
+        st.markdown("""
+> 📁 ไฟล์จะถูกบันทึกที่ `C:\\Users\\ชื่อผู้ใช้\\textbook-ordering\\`
+
+---
+
+### 🔧 ขั้นตอนที่ 4: ตั้งค่า Git (ทำครั้งเดียว)
+พิมพ์คำสั่งนี้ใน Command Prompt (แก้ชื่อ-อีเมลให้เป็นของตัวเอง):
+""")
+        st.code('git config --global user.name "ชื่อของคุณ"\ngit config --global user.email "email@school.ac.th"', language="bash")
+
+        st.markdown("""
+---
+
+### 🔧 ขั้นตอนที่ 5: ติดตั้ง Library (ทำครั้งเดียว)
+เปิด Command Prompt แล้วพิมพ์:
+""")
+        st.code("cd textbook-ordering\npip install -r requirements.txt", language="bash")
+
+        st.markdown("""
+---
+
+### ✅ วิธีใช้งาน (ทำทุกครั้งที่ต้องการอัปเดต)
+
+หลังจากติดตั้งครบแล้ว เพียงแค่:
+1. เปิด Folder `textbook-ordering` ที่ Clone ไว้
+2. **Double-click ไฟล์ `อัปเดตและส่งขึ้นเว็บ.bat`**
+3. รอ ~10 นาที → เสร็จอัตโนมัติ 🎉
+
+เว็บไซต์สั่งหนังสือสำหรับคุณครูจะอัปเดตเองภายใน 1-2 นาทีหลังจากนั้น!
+
+---
+> 💡 **หมายเหตุ:** ครั้งแรกที่ git push อาจมีหน้าต่างขอ Login GitHub ขึ้นมา ให้ใส่ Username และ Password (Personal Access Token) ของบัญชี GitHub ที่ดูแลระบบนี้
+""")
+
 # --------------------------------------------------
 # TAB 4: ผู้ดูแลระบบสั่งหนังสือคุณครู
 # --------------------------------------------------
