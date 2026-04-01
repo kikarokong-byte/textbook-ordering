@@ -6,11 +6,11 @@ db.py - ระบบจัดการฐานข้อมูลผ่าน Go
 import pandas as pd
 import os
 import datetime
+import streamlit as st
 
 # ตรวจสอบว่ามี Google Sheets credentials หรือไม่
 def _is_cloud_mode():
     try:
-        import streamlit as st
         return "gcp_service_account" in st.secrets
     except:
         return False
@@ -46,8 +46,8 @@ def _get_sheet(sheet_name):
     sh = client.open_by_url(spreadsheet_url)
     return sh.worksheet(sheet_name)
 
-@st.cache_data(show_spinner=False, ttl=60)
-def _load_gsheet_as_df(sheet_name):
+@st.cache_data(show_spinner=False, ttl=60)  # type: ignore[misc]
+def _load_gsheet_as_df(sheet_name: str) -> pd.DataFrame:
     ws = _get_sheet(sheet_name)
     data = ws.get_all_records()
     return pd.DataFrame(data) if data else pd.DataFrame()
