@@ -2,6 +2,24 @@ import streamlit as st
 import pandas as pd
 import os
 import db
+import requests
+from io import BytesIO
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def fetch_image(url):
+    """ดึงรูปผ่าน Server-side เพื่อหลีกเลี่ยงการ Block จากเซิร์ฟเวอร์สำนักพิมพ์"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://www.aksorn.com/',
+            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
+        }
+        r = requests.get(url, headers=headers, timeout=5)
+        if r.status_code == 200 and 'image' in r.headers.get('Content-Type', ''):
+            return BytesIO(r.content)
+    except:
+        pass
+    return None
 
 st.set_page_config(page_title="ระบบสั่งหนังสือคุณครู", page_icon="🛍️", layout="wide")
 
@@ -199,11 +217,16 @@ with col_main:
                         # แสดงหน้าปกตัวอย่างแบบไม่ให้ภาพแตก
                         url_img = row.get('URL_รูปภาพ', '')
                         if pd.notnull(url_img) and str(url_img).startswith('http'):
-                            st.markdown(f'<div style="text-align: center; margin-bottom: 10px;"><img src="{url_img}" style="max-height: 180px; max-width: 100%; object-fit: contain; border-radius: 4px;"></div>', unsafe_allow_html=True)
+                            img_data = fetch_image(str(url_img))
+                            if img_data:
+                                st.image(img_data, use_container_width=False, width=160)
+                            else:
+                                # Fallback: ลองให้ browser โหลดเอง
+                                st.markdown(f'<div style="text-align:center;margin-bottom:10px;"><img src="{url_img}" style="max-height:160px;max-width:100%;object-fit:contain;" onerror="this.parentElement.innerHTML=\'<div style=background:#f1f5f9;height:160px;display:flex;align-items:center;justify-content:center;color:#94a3b8;border-radius:4px>\'\u0e44\u0e21\'\u0e21\'\u0e35\u0e20\u0e32\u0e1e</div>\'"></div>', unsafe_allow_html=True)
                         else:
-                            st.markdown("""<div style="background:#f1f5f9; height:180px; display:flex; 
+                            st.markdown("""<div style="background:#f1f5f9; height:160px; display:flex; 
                                        align-items:center; justify-content:center; color:#94a3b8; 
-                                       border-radius:4px; margin-bottom:10px;">ไม่มีภาพครับ</div>""", unsafe_allow_html=True)
+                                       border-radius:4px; margin-bottom:10px;">ไม่มีภาพ</div>""", unsafe_allow_html=True)
                             
                         st.markdown(f"<div class='title-col'>{row.get('ชื่อหนังสือ', '-')}</div>", unsafe_allow_html=True)
                         st.caption(f"ระดับ: {row.get('ชั้น', '-')} | หมวด: {row.get('กลุ่มสาระการเรียนรู้', '-')}")
