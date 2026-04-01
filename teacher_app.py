@@ -62,7 +62,6 @@ with st.container(border=True):
     c1, c2 = st.columns(2)
     with c1:
         teacher_name = st.text_input("ชื่อ-นามสกุล คุณครูผู้ทำรายการ:")
-        st.caption("💡 หากสอนหลายชั้น กรุณาทำรายการและกดยืนยันให้จบทีละชั้น เพื่อแยกงบประมาณออกจากกัน")
     with c2:
         class_name = st.selectbox("ระดับชั้นที่ต้องการเบิกงบประมาณ:", options=["--- กรุณาเลือก ---"] + list(budgets.keys()))
 
