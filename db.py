@@ -35,7 +35,14 @@ def _get_gspread_client():
 def _get_sheet(sheet_name):
     import streamlit as st
     client = _get_gspread_client()
-    spreadsheet_url = st.secrets["spreadsheet_url"]
+    # หา spreadsheet_url ได้ทั้ง top-level และใน gcp_service_account
+    try:
+        spreadsheet_url = st.secrets["spreadsheet_url"]
+    except KeyError:
+        try:
+            spreadsheet_url = st.secrets["gcp_service_account"]["spreadsheet_url"]
+        except KeyError:
+            spreadsheet_url = st.secrets["sheets"]["spreadsheet_url"]
     sh = client.open_by_url(spreadsheet_url)
     return sh.worksheet(sheet_name)
 
