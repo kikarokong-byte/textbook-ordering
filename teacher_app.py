@@ -38,7 +38,8 @@ budgets = db.load_budgets()
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "textbooks.xlsx")
 @st.cache_data(show_spinner=False)
-def load_catalog():
+def load_catalog(file_mtime):
+    # file_mtime เป็น cache key — เปลี่ยนเมื่อไฟล์ถูกอัปเดต ทำให้โหลดใหม่อัตโนมัติ
     if not os.path.exists(DB_PATH):
         return pd.DataFrame()
     df = pd.read_excel(DB_PATH, sheet_name=0)
@@ -49,7 +50,7 @@ def load_catalog():
         df['ราคา_num'] = 0.0
     return df
 
-catalog = load_catalog()
+catalog = load_catalog(os.path.getmtime(DB_PATH) if os.path.exists(DB_PATH) else 0)
 
 if 'cart' not in st.session_state:
     st.session_state.cart = {} 
@@ -178,10 +179,30 @@ with col_sidebar:
     
     filter_my_class = st.checkbox(f"🎓 โชว์เฉพาะหนังสือชั้น {class_name}", value=True)
     search_q = st.text_input("ชื่อหนังสือ หรือ รหัส:")
-    
+
+    # ตัวกรองบัญชีหนังสือ (ยึดบัญชีเป็นหลัก)
+    ACCOUNT_LABELS = {
+        '1.1': 'บัญชี 1.1 — หนังสือเรียน/แบบฝึกหัด ที่ได้รับอนุญาต (สพฐ.)',
+        '1.2': 'บัญชี 1.2 — หนังสือเรียน/แบบฝึกหัด ประกันคุณภาพ (ผู้ผลิต)',
+        '2.1': 'บัญชี 2.1 — สื่อการเรียนรู้ พื้นฐาน ที่ได้รับอนุญาต',
+        '2.2': 'บัญชี 2.2 — สื่อการเรียนรู้ พื้นฐาน ประกันคุณภาพ',
+        '3.1': 'บัญชี 3.1 — สื่อฯ เพิ่มเติม (ฉบับกระทรวงฯ)',
+        '3.2': 'บัญชี 3.2 — สื่อฯ เพิ่มเติม (ประกันคุณภาพสำนักพิมพ์เอกชน)',
+    }
+    if 'บัญชี' in catalog.columns:
+        selected_accounts = st.multiselect(
+            "บัญชีหนังสือ (เลือกได้หลายบัญชี):",
+            options=list(ACCOUNT_LABELS.keys()),
+            default=list(ACCOUNT_LABELS.keys()),
+            format_func=lambda k: ACCOUNT_LABELS[k],
+        )
+    else:
+        selected_accounts = None
+        st.caption("⚠️ ฐานข้อมูลยังไม่มีคอลัมน์ 'บัญชี' — กรุณากดอัปเดตฐานข้อมูลใหม่")
+
     subjects = ["แสดงทั้งหมด"] + sorted(catalog['กลุ่มสาระการเรียนรู้'].dropna().astype(str).unique().tolist())
     search_subject = st.selectbox("หมวดหมู่ / กลุ่มสาระฯ:", options=subjects)
-    
+
     pubs = ["แสดงทั้งหมด"] + sorted(catalog['ผู้จัดพิมพ์'].dropna().astype(str).unique().tolist())
     search_pub = st.selectbox("สำนักพิมพ์:", options=pubs)
     
@@ -193,6 +214,15 @@ with col_main:
     if search_q: res = res[res['ชื่อหนังสือ'].astype(str).str.contains(search_q, case=False, na=False)]
     if search_subject != "แสดงทั้งหมด": res = res[res['กลุ่มสาระการเรียนรู้'].astype(str) == search_subject]
     if search_pub != "แสดงทั้งหมด": res = res[res['ผู้จัดพิมพ์'].astype(str) == search_pub]
+
+    # กรองตามบัญชี (คอลัมน์อาจเป็น "1.1,1.2")
+    if selected_accounts is not None and len(selected_accounts) < len(ACCOUNT_LABELS):
+        sel = set(selected_accounts)
+        def match_account(x):
+            if pd.isna(x): return False
+            parts = {p.strip() for p in str(x).split(',') if p.strip()}
+            return bool(parts & sel)
+        res = res[res['บัญชี'].apply(match_account)]
     
     if filter_my_class and class_name != "--- กรุณาเลือก ---":
         def extract_year_number(text):
@@ -265,6 +295,12 @@ with col_main:
                                        border-radius:4px; margin-bottom:10px;">ไม่มีภาพ</div>""", unsafe_allow_html=True)
                             
                         st.markdown(f"<div class='title-col'>{row.get('ชื่อหนังสือ', '-')}</div>", unsafe_allow_html=True)
+                        acct = row.get('บัญชี', '') if 'บัญชี' in res.columns else ''
+                        if pd.notnull(acct) and str(acct).strip():
+                            st.markdown(
+                                f"<span style='background:#0ea5e9;color:white;padding:2px 8px;border-radius:10px;font-size:0.75em;font-weight:600;'>บัญชี {acct}</span>",
+                                unsafe_allow_html=True
+                            )
                         st.caption(f"ระดับ: {row.get('ชั้น', '-')} | หมวด: {row.get('กลุ่มสาระการเรียนรู้', '-')}")
                         st.markdown(f"<small>🏢 พิมพ์โดย: {row.get('ผู้จัดพิมพ์', '-')}</small>", unsafe_allow_html=True)
                         

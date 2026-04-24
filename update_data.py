@@ -13,8 +13,13 @@ from urllib3.util.retry import Retry
 # ==========================================
 BASE_URL = 'http://202.29.173.190/textbook/web/index.php'
 BASE_IMG = 'http://202.29.173.190/textbook/web/'
-TOTAL_PAGES = 250 # ปรับเป็น 250 หน้าตามที่คุณแจ้ง
 DELAY = 0.8  # หน่วงเวลา 0.8 วินาทีต่อหน้า
+
+# รหัสบัญชีหนังสือ (bookmain) ที่ต้องดึงทั้งหมด
+ACCOUNT_CODES = ['11', '12', '21', '22', '31', '32']
+
+def code_to_label(code):
+    return f'{code[0]}.{code[1]}'
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
@@ -23,18 +28,26 @@ HEADERS = {
     'Referer': 'http://202.29.173.190/textbook/web/index.php',
 }
 
-def get_page_html(page_num, session):
+def get_page_html(page_num, session, bookmain='11,12,21,22,31,32'):
     params = {
         'ispage': page_num,
-        'bookmain': '11,12,31,32',
+        'bookmain': bookmain,
         'bookgroup': '', 'class': '', 'bookprint': '',
         'bookcategory': '', 'name': '', 'bookeditor': '',
         'id_round': '', 'chksearch': 'true'
     }
     r = session.get(BASE_URL, params=params, headers=HEADERS, timeout=30)
     # โค้ดต้นฉบับใช้ utf-8 (หากภาษาไทยเพี้ยน สามารถเปลี่ยนเป็น 'windows-874' หรือ 'tis-620' ได้)
-    r.encoding = 'utf-8' 
+    r.encoding = 'utf-8'
     return r.text
+
+def detect_total_pages(html):
+    """ ตรวจจำนวนหน้ารวมจากข้อความ 'พบจำนวน X รายการ' (10 รายการ/หน้า) """
+    m = re.search(r'พบจำนวน\s*([\d,]+)\s*รายการ', html)
+    if m:
+        total = int(m.group(1).replace(',', ''))
+        return max(1, (total + 9) // 10)
+    return None
 
 def parse_book_block(block_text, img_src, links):
     """ แยกข้อมูลแต่ละ field จาก text block """
@@ -52,7 +65,7 @@ def parse_book_block(block_text, img_src, links):
     }
     
     book = {col: '' for col in
-            ['ประเภทสื่อ','ชื่อหนังสือ','รายวิชา','กลุ่มสาระการเรียนรู้',
+            ['บัญชี','ประเภทสื่อ','ชื่อหนังสือ','รายวิชา','กลุ่มสาระการเรียนรู้',
              'ชั้น','ผู้จัดพิมพ์','ผู้เรียบเรียง','ปีที่เผยแพร่',
              'ขนาด','จำนวนหน้า','กระดาษ','พิมพ์','น้ำหนัก','ราคา',
              'URL_รูปภาพ','URL_ใบประกาศ','URL_ตัวอย่างเนื้อหา']}
@@ -138,24 +151,10 @@ def parse_page(html):
 # ==========================================
 if __name__ == '__main__':
     session = requests.Session()
-    print('✅ Setup เรียบร้อย กำลังทดสอบหน้า 1...')
-    
-    html = get_page_html(1, session)
-    books_test = parse_page(html)
-    
-    if not books_test:
-        print('❌ ยังดึงไม่ได้ ตรวจสอบโครงสร้างหรือการเชื่อมต่ออีกครั้ง')
-        sys.exit()
-        
-    print(f'✅ ทดสอบหน้า 1 ผ่าน: พบ {len(books_test)} รายการ')
-    print(f"📘 ตัวอย่างเล่มแรก: {books_test[0].get('ชื่อหนังสือ')} | สนพ: {books_test[0].get('ผู้จัดพิมพ์')} | ราคา: {books_test[0].get('ราคา')}")
-    print('==========================================\n')
-    
-    print(f'🚀 เริ่ม scrape {TOTAL_PAGES} หน้า แบบขนานด้วย ThreadPoolExecutor')
-    
+
     # ตั้งค่าระบบ Auto-Retry หากเน็ตหลุดหรือเซิร์ฟเวอร์ล่มชั่วคราว
     retry_strategy = Retry(
-        total=3, 
+        total=3,
         backoff_factor=0.5,
         status_forcelist=[429, 500, 502, 503, 504],
     )
@@ -163,42 +162,84 @@ if __name__ == '__main__':
     session.mount("http://", adapter)
     session.mount("https://", adapter)
 
-    def scrape_single_page(p_num):
+    print('✅ Setup เรียบร้อย กำลังตรวจจำนวนหน้าของแต่ละบัญชี...')
+
+    # ตรวจจำนวนหน้าของแต่ละบัญชี
+    pages_per_account = {}
+    for code in ACCOUNT_CODES:
+        html = get_page_html(1, session, bookmain=code)
+        total = detect_total_pages(html)
+        if total is None:
+            # fallback: ลอง parse ดูว่ามีรายการไหม
+            total = 1 if parse_page(html) else 0
+        pages_per_account[code] = total
+        print(f'  บัญชี {code_to_label(code)}: {total} หน้า')
+
+    total_tasks = sum(pages_per_account.values())
+    print(f'\n🚀 เริ่ม scrape รวม {total_tasks} หน้า (10 threads)')
+
+    def scrape_single_page(code, p_num):
         try:
-            h = get_page_html(p_num, session)
+            h = get_page_html(p_num, session, bookmain=code)
             bks = parse_page(h)
-            return p_num, bks, None
+            for b in bks:
+                b['บัญชี'] = code_to_label(code)
+            return code, p_num, bks, None
         except Exception as ex:
-            return p_num, None, ex
+            return code, p_num, None, ex
 
     all_books = []
     failed_pages = []
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {executor.submit(scrape_single_page, p): p for p in range(1, TOTAL_PAGES + 1)}
-        
-        for future in tqdm(concurrent.futures.as_completed(futures), total=TOTAL_PAGES, desc='Scraping', unit='page'):
-            p_num, bks, ex = future.result()
+        futures = {
+            executor.submit(scrape_single_page, code, p): (code, p)
+            for code, n in pages_per_account.items()
+            for p in range(1, n + 1)
+        }
+
+        for future in tqdm(concurrent.futures.as_completed(futures), total=total_tasks, desc='Scraping', unit='page'):
+            code, p_num, bks, ex = future.result()
             if ex:
-                tqdm.write(f'  ⚠️ หน้า {p_num} error: {ex}')
-                failed_pages.append(p_num)
+                tqdm.write(f'  ⚠️ บัญชี {code_to_label(code)} หน้า {p_num} error: {ex}')
+                failed_pages.append((code, p_num))
             elif bks is not None:
                 all_books.extend(bks)
-        
-    print(f'\n✅ ดึงข้อมูลเสร็จ! รวม {len(all_books)} รายการ')
-    
+
+    print(f'\n✅ ดึงข้อมูลเสร็จ! รวม {len(all_books)} รายการ (ก่อนรวมซ้ำ)')
+
     if failed_pages:
         print(f'หน้าที่ล้มเหลว: {failed_pages}')
-        
-    # สร้าง DataFrame และ Clean ข้อมูล
+
+    # สร้าง DataFrame และรวมรายการซ้ำ (หนังสือเล่มเดียวกันแต่อยู่หลายบัญชี)
     if all_books:
         df = pd.DataFrame(all_books)
-        # เก็บข้อมูลดิบทั้งหมด ไม่ลบรายการซ้ำ
-        df_clean = df.copy()
+
+        # key สำหรับ dedupe: ใช้ URL_รูปภาพ (unique per book) ถ้ามี; fallback เป็น combo
+        def dedupe_key(row):
+            if row.get('URL_รูปภาพ'):
+                return row['URL_รูปภาพ']
+            return (row.get('ชื่อหนังสือ',''), row.get('ผู้จัดพิมพ์',''),
+                    row.get('ชั้น',''), row.get('ประเภทสื่อ',''))
+
+        df['_key'] = df.apply(dedupe_key, axis=1)
+
+        # เรียงบัญชีให้สวย (1.1, 1.2, 2.1, ...) แล้ว group
+        account_order = [code_to_label(c) for c in ACCOUNT_CODES]
+        def join_accounts(series):
+            uniq = sorted(set(series.dropna().astype(str)),
+                          key=lambda x: account_order.index(x) if x in account_order else 999)
+            return ','.join(uniq)
+
+        # เอาแถวแรกของแต่ละ key (ทุก field ของหนังสือเหมือนกัน) แล้วแทน บัญชี ด้วยค่ารวม
+        merged_accounts = df.groupby('_key')['บัญชี'].apply(join_accounts)
+        df_clean = df.drop_duplicates('_key', keep='first').copy()
+        df_clean['บัญชี'] = df_clean['_key'].map(merged_accounts)
+        df_clean = df_clean.drop(columns=['_key']).reset_index(drop=True)
         df_clean.index += 1
-        
-        print(f'จำนวนข้อมูลทั้งหมด: {len(df_clean):,} รายการ')
-        
+
+        print(f'จำนวนหนังสือหลังรวมซ้ำ: {len(df_clean):,} รายการ')
+
         # คลีนช่องราคาให้เป็นตัวเลขล้วน สำหรับนำไปคำนวณในระบบค้นหาหลัก
         df_clean['ราคา'] = df_clean['ราคา'].astype(str).str.replace('บาท', '').str.replace(',', '').str.strip()
         
