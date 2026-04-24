@@ -474,7 +474,16 @@ with tab3:
     _mtime = os.path.getmtime(DB_PATH) if os.path.exists(DB_PATH) else None
     if _mtime:
         import datetime as _dt
-        _updated_str = _dt.datetime.fromtimestamp(_mtime).strftime("%-d %b %Y เวลา %H:%M น.")
+        try:
+            from zoneinfo import ZoneInfo
+            _tz = ZoneInfo("Asia/Bangkok")
+        except Exception:
+            _tz = _dt.timezone(_dt.timedelta(hours=7))
+        _dt_local = _dt.datetime.fromtimestamp(_mtime, tz=_tz)
+        try:
+            _updated_str = _dt_local.strftime("%-d %b %Y เวลา %H:%M น.")
+        except ValueError:
+            _updated_str = _dt_local.strftime("%#d %b %Y เวลา %H:%M น.")
     else:
         _updated_str = "ไม่ทราบ"
 
